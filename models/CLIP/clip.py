@@ -25,8 +25,8 @@ class CLIPTextEmbedder:
       
     return text_embedding.cpu().numpy()
    
-if __name__ == "__main__":
-    embedder = CLIPTextEmbedder()
-    text = "A quick brown fox jumps over a lazy dog."
-    embedding = embedder.get_text_embedding(text)
-    print(f"Text embedding shape: {embedding.shape}")
+# if __name__ == "__main__":
+#     embedder = CLIPTextEmbedder()
+#     text = "A quick brown fox jumps over a lazy dog."
+#     embedding = embedder.get_text_embedding(text)
+#     print(f"Text embedding shape: {embedding.shape}")
