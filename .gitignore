@@ -4,10 +4,18 @@ env/
 myenv/
 
 # Ignore compiled Python files
+<<<<<<< HEAD
 _pycache_/
+=======
+__pycache__/
+>>>>>>> 697a2804203637079333136f88f4c6877c9afc71
 *.pyc
 *.pyo
 
 # Ignore logs and environment variables
 *.log
+<<<<<<< HEAD
 .env
+=======
+.env
+>>>>>>> 697a2804203637079333136f88f4c6877c9afc71
