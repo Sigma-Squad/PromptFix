@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class AttnBlock(nn.Module):
-    def __init__(self, in_channels, default_eps, force_type_convert) -> None:
+    def __init__(self, in_channels: int, default_eps: bool, force_type_convert: bool) -> None:
         super().__init__()
         self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, affine=True) if default_eps else torch.nn.GroupNorm(
             num_groups=32, num_channels=in_channels, affine=True, eps=1e-6)
@@ -15,7 +15,7 @@ class AttnBlock(nn.Module):
 
         self.proj_out = nn.Conv2d(in_channels, in_channels, 1, 1, 0)
 
-    def forward(self, x) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = x
         if self.force_type_convert:
             h = self.norm.float()(h.float())
@@ -45,19 +45,19 @@ class AttnBlock(nn.Module):
         return x+h
 
 
-def make_attn(in_channels, default_eps, force_type_convert, attn_type="vanilla") -> nn.Module:
+def make_attn(in_channels: int, default_eps: bool, force_type_convert: bool, attn_type: str = "vanilla") -> nn.Module:
     if attn_type == "vanilla":
         return AttnBlock(in_channels, default_eps, force_type_convert)
 
 
 class DownSample(nn.Module):
-    def __init__(self, in_channels, with_conv_layer) -> None:
+    def __init__(self, in_channels: int, with_conv_layer: bool) -> None:
         super().__init__()
         self.with_conv = with_conv_layer
         if (self.with_conv):
             self.conv = nn.Conv2d(in_channels, in_channels, 3, 2, 0)
 
-    def forward(self, x) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.with_conv:
             pad = (0, 1, 0, 1)
             x = nn.functional.pad(x, pad, mode='constant', value=0)
@@ -68,7 +68,11 @@ class DownSample(nn.Module):
 
 
 class ResNetBlock(nn.Module):
-    def __init__(self, *, in_channels, default_eps, force_type_convert, out_channels=None, conv_shortcut=False, dropout, temb_channels=512) -> None:
+    def __init__(self, *, in_channels: int,
+                 default_eps: bool, force_type_convert: bool,
+                 out_channels: int = None, conv_shortcut: bool = False,
+                 dropout: float, temb_channels: int = 512) -> None:
+
         super(ResNetBlock, self).__init__()
 
         self.in_channels = in_channels
@@ -99,7 +103,7 @@ class ResNetBlock(nn.Module):
                 self.nin_shortcut = nn.Conv2d(
                     self.in_channels, self.out_channels, 1, 1, 0)
 
-    def forward(self, x, temb, skip_x=None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, temb: torch.Tensor) -> torch.Tensor:  # Skip_x was removed
         h = x
         if self.force_type_convert:
             h = self.norm1.float()(h.float())
@@ -133,8 +137,16 @@ class ResNetBlock(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, *, ch, out_ch, ch_mult=(1, 2, 4, 8), num_res_blocks, attn_resolutions, default_eps=False, force_type_convert=False, dropout=0.0,
-                 resample_with_conv=True, in_channels, resolution, z_channels, double_z=True, use_linear_attn=False, attn_type="vanilla", **kwargs) -> None:
+    def __init__(self, *, ch: int, out_ch: int,
+                 ch_mult: iter = (1, 2, 4, 8),
+                 num_res_blocks: int, attn_resolutions: iter,
+                 default_eps: bool = False, force_type_convert: bool = False,
+                 dropout: float = 0.0, resample_with_conv: bool = True,
+                 in_channels: int, resolution: int,
+                 z_channels: int, double_z: bool = True,
+                 use_linear_attn: bool = False,
+                 attn_type: str = "vanilla", **kwargs) -> None:
+
         super().__init__()
 
         self.ch = ch
@@ -167,7 +179,7 @@ class Encoder(nn.Module):
                 if resolution in attn_resolutions:
                     attn.append(make_attn(block_in, default_eps,
                                 force_type_convert, attn_type=attn_type))
-            # self.down.append(nn.Conv2d(self.ch*self.input_channel_mult[level],self.ch*self.input_channel_mult[level+1],3,2,1))
+
             down = nn.Module()
             down.block = block
             down.attn = attn
@@ -191,7 +203,7 @@ class Encoder(nn.Module):
         self.conv_out = nn.Conv2d(
             block_in, 2*z_channels if double_z else z_channels, 3, 1, 1)
 
-    def forward(self, x) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         temb = None
         hs = [self.conv_in(x.type(self.conv_in.weight.dtype).to(
             self.conv_in.weight.device))]
