@@ -1,6 +1,30 @@
 import torch
 import torch.nn as nn
 
+
+def make_attn(in_channels,default_eps,force_type_convert,attn_type="vanilla"):
+    if attn_type == "vanilla":
+        # return AttnBlock(in_channels, default_eps, force_type_convert)
+        # TODO: Implement the AttnBlock class
+        pass
+
+class DownSample(nn.Module):
+    def __init__(self,in_channels,with_conv_layer):
+        super().__init__()
+        self.with_conv = with_conv_layer
+        if (self.with_conv):
+            self.conv = nn.Conv2d(in_channels,in_channels,3,2,0)
+
+    def forward(self,x):
+        if self.with_conv:
+            pad = (0,1,0,1)
+            x = nn.functional.pad(x,pad,mode='constant',value=0)
+            x = self.conv(x)
+        else:
+            x = nn.functional.avg_pool2d(x,2,2)
+        return x
+
+
 class ResNetBlock(nn.Module):
     def __init__(self,*,in_channels,default_eps,force_type_convert,out_channels=None,conv_shortcut=False,dropout,temb_channels=512,):
         super(ResNetBlock,self).__init__()
@@ -78,6 +102,8 @@ class Encoder(nn.Module):
         self.input_channel_mult = (1,)+tuple(ch_mult)
         
         self.down = nn.ModuleList()
+
+        curr_res = resolution
         for level in range(self.num_resolutions):
             
             block = nn.ModuleList()
@@ -86,13 +112,53 @@ class Encoder(nn.Module):
             block_in = self.ch*self.input_channel_mult[level]
             block_out = self.ch*self.input_channel_mult[level+1]
             
-            for i in range(self.num_res_blocks):
+            for _ in range(self.num_res_blocks):
                 block.append(ResNetBlock(in_channels=block_in,default_eps=default_eps,force_type_convert=force_type_convert,out_channels=block_out,dropout=dropout,temb_channels=self.temb_ch))
                 block_in = block_out
                 
                 if resolution in attn_resolutions:
-                    attn.append(nn.MultiheadAttention(block_out,1,dropout=dropout)) 
+                    attn.append(nn.MultiheadAttention(block_out,1,dropout=dropout)) # check if custom attention is required
             # self.down.append(nn.Conv2d(self.ch*self.input_channel_mult[level],self.ch*self.input_channel_mult[level+1],3,2,1))
+            down = nn.Module()
+            down.block = block  
+            down.attn = attn
+            if level != self.num_resolutions -1:
+                down.downsample = DownSample(block_in,resample_with_conv)
+                curr_res = curr_res//2
+            self.down.append(down)
         
+        self.mid = nn.Module()
+        self.mid.block_1 = ResNetBlock(in_channels=block_in,out_channels=block_out,default_eps=default_eps,force_type_convert=force_type_convert,dropout=dropout,temb_channels=self.temb_ch)
+        self.mid.attn_1 = nn.MultiheadAttention(block_out,1,dropout=dropout)
+        self.mid.block_2 = ResNetBlock(in_channels=block_out,out_channels=block_out,default_eps=default_eps,force_type_convert=force_type_convert,dropout=dropout,temb_channels=self.temb_ch)
 
+        self.force_type_convert = force_type_convert
+        self.norm_out = nn.GroupNorm(num_groups=32,num_channels=block_out,affine=True) if default_eps else torch.nn.GroupNorm(num_groups=32,num_channels=block_out,affine=True,eps = 1e-6)
+
+        self.conv_out = nn.Conv2d(block_in,2*z_channels if double_z else z_channels,3,1,1)
+
+    def forward(self,x):
+        temb = None
+        hs = [self.conv_in(x.type(self.conv_in.weight.dtype).to(self.conv_in.weight.device))]
+
+        for level in range(self.num_resolutions):
+            for itr_block in range(self.num_res_blocks):
+                h = self.down[level].block[itr_block](hs[-1],temb)
+                if len(self.down[level].attn) > 0:
+                    h = self.down[level].attn[itr_block](h)
+                hs.append(h)
+            if level != self.num_resolutions -1:
+                hs.append(self.down[level].downsample(hs[-1]))
+        
+        h = hs[-1]
+        h = self.mid.block_2(self.mid_attn_1(self.mid.block_1(h,temb)))
+
+        if self.force_type_convert:
+            h = self.norm_out.float()(h.float())
+            h = h.half()
+        else:
+            h = self.norm_out(h)
+        h = h*torch.sigmoid(h)
+        h = self.conv_out(h)
+        return h, hs
 
