@@ -1,5 +1,7 @@
+from __future__ import annotations  # for using the class itself as a type hint
 import torch
 import numpy as np
+from typing import Optional, List
 
 
 class DiagonalGaussianDistribution(object):
@@ -22,7 +24,7 @@ class DiagonalGaussianDistribution(object):
         else:
             return self.mean + self.std * torch.randn_like(self.std)
 
-    def kl(self, other: torch.Tensor = None) -> torch.Tensor:
+    def kl(self, other: Optional[DiagonalGaussianDistribution] = None) -> torch.Tensor:
         if self.deterministic:
             return torch.tensor([0.0])
         else:
@@ -31,7 +33,7 @@ class DiagonalGaussianDistribution(object):
             else:
                 return 0.5 * torch.sum(torch.pow(self.mean - other.mean, 2) / other.var + self.var / other.var - self.logvar + other.logvar - 1, dim=[1, 2, 3])
 
-    def nll(self, sample: torch.Tensor, dims: list = [1, 2, 3]) -> torch.Tensor:
+    def nll(self, sample: torch.Tensor, dims: List[int] = [1, 2, 3]) -> torch.Tensor:
         if self.deterministic:
             return torch.tensor([0.0])
         return 0.5*torch.sum(torch.pow(sample-self.mean, 2)/self.var + self.logvar + np.log(2.0*np.pi), dim=dims)
