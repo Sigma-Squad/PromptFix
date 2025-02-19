@@ -1,10 +1,16 @@
+from typing import Optional, Tuple, List
 import torch
 import torch.nn as nn
 
 
 class AttnBlock(nn.Module):
+    """
+    Simplied version of the Attention block used in the promptfix codebase.
+    """
+
     def __init__(self, in_channels: int, default_eps: bool, force_type_convert: bool) -> None:
-        super().__init__()
+        super(AttnBlock, self).__init__()  # type: ignore
+
         self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, affine=True) if default_eps else torch.nn.GroupNorm(
             num_groups=32, num_channels=in_channels, affine=True, eps=1e-6)
         self.force_type_convert = force_type_convert
@@ -48,11 +54,12 @@ class AttnBlock(nn.Module):
 def make_attn(in_channels: int, default_eps: bool, force_type_convert: bool, attn_type: str = "vanilla") -> nn.Module:
     if attn_type == "vanilla":
         return AttnBlock(in_channels, default_eps, force_type_convert)
+    return nn.Module()  # TODO: Add other blocks if required
 
 
 class DownSample(nn.Module):
     def __init__(self, in_channels: int, with_conv_layer: bool) -> None:
-        super().__init__()
+        super().__init__()  # type: ignore
         self.with_conv = with_conv_layer
         if (self.with_conv):
             self.conv = nn.Conv2d(in_channels, in_channels, 3, 2, 0)
@@ -68,12 +75,16 @@ class DownSample(nn.Module):
 
 
 class ResNetBlock(nn.Module):
+    """
+    Modified version of the ResNetBlock used in the promptfix codebase.
+    """
+
     def __init__(self, *, in_channels: int,
                  default_eps: bool, force_type_convert: bool,
-                 out_channels: int = None, conv_shortcut: bool = False,
+                 out_channels: Optional[int] = None, conv_shortcut: bool = False,
                  dropout: float, temb_channels: int = 512) -> None:
 
-        super(ResNetBlock, self).__init__()
+        super(ResNetBlock, self).__init__()  # type: ignore
 
         self.in_channels = in_channels
         self.out_channels = in_channels if out_channels is None else out_channels
@@ -82,7 +93,7 @@ class ResNetBlock(nn.Module):
 
         self.norm1 = nn.GroupNorm(num_groups=32, num_channels=self.in_channels, affine=True) if default_eps else torch.nn.GroupNorm(
             num_groups=32, num_channels=self.in_channels, affine=True, eps=1e-6)
-        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, 1, 1)
+        self.conv1 = nn.Conv2d(in_channels, self.out_channels, 3, 1, 1)
         self.temb_channels = temb_channels
         self.default_eps = default_eps
 
@@ -137,17 +148,21 @@ class ResNetBlock(nn.Module):
 
 
 class Encoder(nn.Module):
+    """
+    Encoder to be used in the VQ-VAE model. 
+    """
+
     def __init__(self, *, ch: int, out_ch: int,
-                 ch_mult: iter = (1, 2, 4, 8),
-                 num_res_blocks: int, attn_resolutions: iter,
+                 ch_mult: Tuple[int, ...] | List[int] = (1, 2, 4, 8),
+                 num_res_blocks: int, attn_resolutions: list[int],
                  default_eps: bool = False, force_type_convert: bool = False,
                  dropout: float = 0.0, resample_with_conv: bool = True,
                  in_channels: int, resolution: int,
                  z_channels: int, double_z: bool = True,
                  use_linear_attn: bool = False,
-                 attn_type: str = "vanilla", **kwargs) -> None:
+                 attn_type: str = "vanilla", **kwargs: object) -> None:
 
-        super().__init__()
+        super().__init__()  # type: ignore
 
         self.ch = ch
         self.temb_ch = 0
@@ -163,6 +178,10 @@ class Encoder(nn.Module):
         self.down = nn.ModuleList()
 
         curr_res = resolution
+
+        block_in: int = 0
+        block_out: int = 0
+
         for level in range(self.num_resolutions):
 
             block = nn.ModuleList()
@@ -203,25 +222,27 @@ class Encoder(nn.Module):
         self.conv_out = nn.Conv2d(
             block_in, 2*z_channels if double_z else z_channels, 3, 1, 1)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
         temb = None
-        hs = [self.conv_in(x.type(self.conv_in.weight.dtype).to(
+        hs: List[torch.Tensor] = [self.conv_in(x.type(self.conv_in.weight.dtype).to(
             self.conv_in.weight.device))]
-
+        h: torch.Tensor = hs[-1]
         for level in range(self.num_resolutions):
             for itr_block in range(self.num_res_blocks):
-                h = self.down[level].block[itr_block](hs[-1], temb)
-                if len(self.down[level].attn) > 0:
-                    h = self.down[level].attn[itr_block](h)
-                hs.append(h)
+                # Possible source of error, check when integrating
+                h = self.down[level].block[itr_block](h, temb)  # type: ignore
+                if len(self.down[level].attn) > 0:  # type: ignore
+                    h = self.down[level].attn[itr_block](h)  # type: ignore
+                hs.append(h)  # type: ignore
             if level != self.num_resolutions - 1:
-                hs.append(self.down[level].downsample(hs[-1]))
+                hs.append(self.down[level].downsample(hs[-1]))  # type: ignore
 
         h = hs[-1]
-        h = self.mid.block_2(self.mid_attn_1(self.mid.block_1(h, temb)))
+        h = self.mid.block_2(self.mid.attn_1(  # type: ignore
+            self.mid.block_1(h, temb)))  # type: ignore
 
         if self.force_type_convert:
-            h = self.norm_out.float()(h.float())
+            h = self.norm_out.float()(h.float())  # type: ignore
             h = h.half()
         else:
             h = self.norm_out(h)
