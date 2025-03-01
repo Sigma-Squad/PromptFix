@@ -72,7 +72,7 @@ class Unet(nn.Module):
 
             x = self.relu(x + encoded_feature)
                 
-            return x
+        return x
     
      
             

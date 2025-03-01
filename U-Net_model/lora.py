@@ -10,4 +10,6 @@ class LoRAConv(nn.Module):
 
     def forward(self, x):
         lora_update = self.lora(x.mean(dim=(2, 3))) / self.rank
-        return self.conv(x) + lora_update.view(x.shape[0], -1, 1, 1)
+        lora_update = lora_update.view(x.shape[0], -1, 1, 1)  # Ensure correct shape
+        return self.conv(x) + lora_update
+
