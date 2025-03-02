@@ -4,9 +4,28 @@ from models.VAE.encoder import Encoder
 from models.VAE.decoder import Decoder
 from models.VAE.distribution import DiagonalGaussianDistribution
 
+import importlib
+
+def instantiate_from_config(config):
+    if not "target" in config:
+        if config == '__is_first_stage__':
+            return None
+        elif config == "__is_unconditional__":
+            return None
+        raise KeyError("Expected key `target` to instantiate.")
+    return get_obj_from_str(config["target"])(**config.get("params", dict()))
+
+def get_obj_from_str(string, reload=False):
+    module, cls = string.rsplit(".", 1)
+    if reload:
+        module_imp = importlib.import_module(module)
+        importlib.reload(module_imp)
+    return getattr(importlib.import_module(module, package=None), cls)
+
 class AutoencoderKL(nn.Module):
     def __init__ (self,
                   ddconfig,
+                  lossconfig,
                   embed_dim,
                   image_key='image',
                   colorize_nlabels=None,
@@ -16,8 +35,8 @@ class AutoencoderKL(nn.Module):
         super(AutoencoderKL, self).__init__()
         self.image_key = image_key
         self.encoder = Encoder(**ddconfig)
-        self.decoder = Decoder(**ddconfig) # Decoder needs to be written
-        # self.loss = instantiate_from_config(lossconfig)
+        self.decoder = Decoder(**ddconfig)
+        self.loss = instantiate_from_config(lossconfig)
         assert ddconfig['double_z']
         self.quant_conv = nn.Conv2d(2*ddconfig['z_channels'], 2*embed_dim, 1)
         self.post_quant_conv = nn.Conv2d(embed_dim, ddconfig['z_channels'], 1) # 
@@ -100,4 +119,3 @@ class AutoencoderKL(nn.Module):
 
     # def to_rgb
 
-    
