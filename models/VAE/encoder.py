@@ -224,8 +224,7 @@ class Encoder(nn.Module):
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
         temb = None
-        hs: List[torch.Tensor] = [self.conv_in(x.type(self.conv_in.weight.dtype).to(
-            self.conv_in.weight.device))]
+        hs: List[torch.Tensor] = [self.conv_in(x.type(self.conv_in.weight.dtype).to(self.conv_in.weight.device))]
         h: torch.Tensor = hs[-1]
         for level in range(self.num_resolutions):
             for itr_block in range(self.num_res_blocks):

@@ -3,6 +3,7 @@ venv/
 env/
 myenv/
 .vnev
+promptfix/
 
 # Ignore compiled Python files
 <<<<<<< HEAD

@@ -6,7 +6,6 @@ from einops import rearrange
 
 from encoder import make_attn, ResNetBlock
 
-
 class Upsample(nn.Module):
     def __init__(self, in_channels, with_conv):
         super().__init__()
@@ -67,14 +66,14 @@ class Decoder(nn.Module):
 
         # middle
         self.mid = nn.Module()
-        self.mid.block_1 = ResnetBlock(in_channels=block_in,
+        self.mid.block_1 = ResNetBlock(in_channels=block_in,
                                        default_eps=default_eps,
                                        force_type_convert=force_type_convert,
                                        out_channels=block_in,
                                        temb_channels=self.temb_ch,
                                        dropout=dropout)
         self.mid.attn_1 = make_attn(block_in, default_eps, force_type_convert, attn_type=attn_type)
-        self.mid.block_2 = ResnetBlock(in_channels=block_in,
+        self.mid.block_2 = ResNetBlock(in_channels=block_in,
                                        default_eps=default_eps,
                                        force_type_convert=force_type_convert,
                                        out_channels=block_in,
@@ -88,7 +87,7 @@ class Decoder(nn.Module):
             attn = nn.ModuleList()
             block_out = ch*ch_mult[i_level]
             for i_block in range(self.num_res_blocks+1):
-                block.append(ResnetBlock(in_channels=block_in,
+                block.append(ResNetBlock(in_channels=block_in,
                                          default_eps=default_eps,
                                          force_type_convert=force_type_convert,
                                          out_channels=block_out,
