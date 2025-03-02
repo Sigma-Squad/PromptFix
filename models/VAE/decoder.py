@@ -4,7 +4,7 @@ import torch.nn as nn
 import numpy as np
 from einops import rearrange
 
-from models.VAE.attn import make_attn, ResNetBlock
+from encoder import make_attn, ResNetBlock
 
 
 class Upsample(nn.Module):
