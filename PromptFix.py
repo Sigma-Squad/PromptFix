@@ -8,7 +8,7 @@ sys.path.append("models/CLIP")
 from clip import CLIPTextEmbedder
 
 # Load dataset
-dataset = load_dataset("yeates/PromptfixData", split="train")
+dataset = load_dataset("yeates/PromptfixData", split="train", streaming = True)
 dataset = dataset.remove_columns([col for col in dataset.column_names if col not in ["auxiliary_prompt", "instruction"]])
 embedder = CLIPTextEmbedder()
 
