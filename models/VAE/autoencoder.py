@@ -63,10 +63,12 @@ class AutoencoderKL(nn.Module):
     
     def forward(self, input, sample_posterior=True):
         posterior = self.encode(input)
+        print("got posterior", flush=True)
         if sample_posterior:
             z = posterior.sample()
         else:
             z = posterior.mode()
+        print("got z", flush=True)
         return self.decode(z), posterior
 
     def get_input(self, batch, image_key):

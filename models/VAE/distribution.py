@@ -8,7 +8,10 @@ class DiagonalGaussianDistribution(object):
 
     def __init__(self, parameter: torch.Tensor, deterministic: bool = False) -> None:
         self.parameter = parameter
-        self.mean, self.logvar = torch.chunk(parameter, 2, dim=-1)
+        print("parameter shape", parameter.shape)
+        self.mean, self.logvar = torch.chunk(parameter, 2, dim=1)
+        print("mean shape", self.mean.shape)
+        print("logvar shape", self.logvar.shape)
         self.logvar = torch.clamp(self.logvar, -30.0, 20.0)
         self.deterministic = deterministic
         self.std = torch.exp(0.5*self.logvar)

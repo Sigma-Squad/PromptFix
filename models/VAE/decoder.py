@@ -3,8 +3,12 @@ import torch
 import torch.nn as nn
 import numpy as np
 from einops import rearrange
+import logging
 
-from encoder import make_attn, ResNetBlock
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
+
+from models.VAE.encoder import make_attn, ResNetBlock
 
 class Upsample(nn.Module):
     def __init__(self, in_channels, with_conv):
@@ -114,44 +118,54 @@ class Decoder(nn.Module):
                                         padding=1)
 
     def forward(self, z, hs=None):
-        #assert z.shape[1:] == self.z_shape[1:]
+        logger.info(f"Input z shape: {z.shape}")
         self.last_z_shape = z.shape
 
-        # timestep embedding
         temb = None
-
-        # z to block_in
         h = self.conv_in(z)
+        logger.info(f"After conv_in: {h.shape}")
 
-        # middle
+        logger.info("--- Mid Block ---")
         h = self.mid.block_1(h, temb)
-        h = self.mid.attn_1(h)
-        h = self.mid.block_2(h, temb)
+        logger.info(f"After Mid Block 1: {h.shape}")
 
-        # upsampling
+        h = self.mid.attn_1(h)
+        logger.info(f"After Mid Attention: {h.shape}")
+
+        h = self.mid.block_2(h, temb)
+        logger.info(f"After Mid Block 2: {h.shape}")
+
         for i_level in reversed(range(self.num_resolutions)):
+            logger.info(f"--- Level {i_level} ---")
             for i_block in range(self.num_res_blocks+1):
-                # h = self.up[i_level].block[i_block](h, temb)
-                if hs is not None:
-                    h = self.up[i_level].block[i_block](h, temb, hs.pop())
+                if hs:
+                    h = self.up[i_level].block[i_block](h, temb, hs.pop())  
                 else:
-                    h = self.up[i_level].block[i_block](h, temb, None)
+                    h = self.up[i_level].block[i_block](h, temb)
+                logger.info(f"  ResBlock {i_block}: {h.shape}")
+
                 if len(self.up[i_level].attn) > 0:
                     h = self.up[i_level].attn[i_block](h)
+                    logger.info(f"  Attn Block {i_block}: {h.shape}")
+
             if i_level != 0:
                 h = self.up[i_level].upsample(h)
+                logger.info(f"  After Upsample: {h.shape}")
 
-        # end
         if self.give_pre_end:
             return h
 
-        if self.force_type_convert:
-            h = self.norm_out.float()(h.float())
-            h = h.half()
-        else:
-            h = self.norm_out(h)
+        h = self.norm_out(h)
+        logger.info(f"Before Activation: {h.shape}")
+
         h = nonlinearity(h)
+        logger.info(f"Before conv_out: {h.shape}")
+
         h = self.conv_out(h)
+        logger.info(f"Final Output: {h.shape}")
+
         if self.tanh_out:
             h = torch.tanh(h)
+            logger.info(f"After Tanh: {h.shape}")
+
         return h

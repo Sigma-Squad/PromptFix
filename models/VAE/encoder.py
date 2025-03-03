@@ -1,7 +1,10 @@
 from typing import Optional, Tuple, List
 import torch
 import torch.nn as nn
+import logging
 
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 class AttnBlock(nn.Module):
     """
@@ -153,7 +156,8 @@ class Encoder(nn.Module):
     """
 
     def __init__(self, *, ch: int, out_ch: int,
-                 ch_mult: Tuple[int, ...] | List[int] = (1, 2, 4, 8),
+                 ch_mult,
+                #  ch_mult: Tuple[int, ...] | List[int] = (1, 2, 4, 8),
                  num_res_blocks: int, attn_resolutions: list[int],
                  default_eps: bool = False, force_type_convert: bool = False,
                  dropout: float = 0.0, resample_with_conv: bool = True,
@@ -223,28 +227,46 @@ class Encoder(nn.Module):
             block_in, 2*z_channels if double_z else z_channels, 3, 1, 1)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+        logger.info(f"Input x shape: {x.shape}")
+
         temb = None
-        hs: List[torch.Tensor] = [self.conv_in(x.type(self.conv_in.weight.dtype).to(self.conv_in.weight.device))]
+        hs: List[torch.Tensor] = [self.conv_in(x)]
+        logger.info(f"After conv_in: {hs[-1].shape}")
+
         h: torch.Tensor = hs[-1]
         for level in range(self.num_resolutions):
+            logger.info(f"--- Level {level} ---")
             for itr_block in range(self.num_res_blocks):
-                # Possible source of error, check when integrating
                 h = self.down[level].block[itr_block](h, temb)  # type: ignore
+                logger.info(f"  ResBlock {itr_block}: {h.shape}")
+
                 if len(self.down[level].attn) > 0:  # type: ignore
                     h = self.down[level].attn[itr_block](h)  # type: ignore
-                hs.append(h)  # type: ignore
+                    logger.info(f"  Attn Block {itr_block}: {h.shape}")
+
+                hs.append(h)
+
             if level != self.num_resolutions - 1:
                 hs.append(self.down[level].downsample(hs[-1]))  # type: ignore
+                logger.info(f"  After Downsample: {hs[-1].shape}")
 
-        h = hs[-1]
-        h = self.mid.block_2(self.mid.attn_1(  # type: ignore
-            self.mid.block_1(h, temb)))  # type: ignore
+        logger.info("--- Mid Block ---")
+        h = self.mid.block_1(h, temb)
+        logger.info(f"After Mid Block 1: {h.shape}")
 
-        if self.force_type_convert:
-            h = self.norm_out.float()(h.float())  # type: ignore
-            h = h.half()
-        else:
-            h = self.norm_out(h)
-        h = h*torch.sigmoid(h)
+        h = self.mid.attn_1(h)
+        logger.info(f"After Mid Attention: {h.shape}")
+
+        h = self.mid.block_2(h, temb)
+        logger.info(f"After Mid Block 2: {h.shape}")
+
+        h = self.norm_out(h)
+        logger.info(f"Before Activation: {h.shape}")
+
+        h = h * torch.sigmoid(h)
+        logger.info(f"Before conv_out: {h.shape}")
+
         h = self.conv_out(h)
+        logger.info(f"Final Output: {h.shape}")
+
         return h, hs
