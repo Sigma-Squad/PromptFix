@@ -2,10 +2,10 @@ from abc import abstractmethod
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-from .attention import  QKVAttentionLegacy, QKVAttention, AttentionBlock
+from .attention import  QKVAttentionLegacy, QKVAttention, AttentionBlock, SpatialTransformer, CrossAttention, FeedForward
 from .utils import convert_module_to_f16, convert_module_to_f32
 from ldm.modules.diffusionmodules.util import (checkpoint, conv_nd, linear, avg_pool_nd, zero_module, normalization, timestep_embedding)
-from ldm.modules.attention import SpatialTransformer, CrossAttention, FeedForward
+# from ldm.modules.attention import SpatialTransformer, CrossAttention, FeedForward
 
 class AttentionPool2d(nn.Module):
     """
