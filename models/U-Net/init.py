@@ -1,3 +1,3 @@
-from .unet import UNetModel, EncoderUNetModel  # Explicitly expose main classes
+from .unet import UNetModel  # Explicitly expose main classes
 
-__all__ = ["UNetModel", "EncoderUNetModel"]
+__all__ = ["UNetModel"]
