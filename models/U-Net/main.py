@@ -1,6 +1,6 @@
 import torch
 import torchprofile
-from models.unet.model import UNetModel
+from unet.model import UNetModel
 
 config = {
     "image_size": 32,
@@ -32,6 +32,17 @@ config = {
     "disable_dual_context": False,
 }
 
-unet_model = UNetModel(**config)
-input_tensor = torch.randn(1, 8, 64, 64)
-torchprofile.profile_macs(unet_model, (input_tensor, torch.tensor([1]), torch.randn(2, 768)))
+unet_model = UNetModel(**config).half()
+
+input_tensor = torch.randn(1, 8, 64, 64).half()
+timesteps = torch.tensor([1]).to(input_tensor.device)
+context = torch.randn(2, 768).half().to(input_tensor.device)
+
+# If necessary, unsqueeze the context to make sure it has 3 dimensions
+if context.ndim == 2:
+    context = context.unsqueeze(1)
+
+# Forward pass without profiling
+output = unet_model(input_tensor, timesteps, context)
+
+print("Output shape:", output.shape)

@@ -1,10 +1,23 @@
 import math
 import torch as th
-import torch.nn as nn
+from torch import nn, einsum
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
+import numpy as np
+from inspect import isfunction
+from .utils import checkpoint, conv_nd, zero_module, normalization, timestep_embedding
 
 from einops import rearrange, repeat
+
+
+def default(val, d):
+    if exists(val):
+        return val
+    return d() if isfunction(d) else d
+
+def exists(val):
+    return val is not None
+
 
 class QKVAttentionLegacy(nn.Module):
     def __init__(self, n_heads):
@@ -29,7 +42,11 @@ class QKVAttentionLegacy(nn.Module):
     def count_flops(model, _x, y):
         return count_flops_attn(model, _x, y)
 
-
+def count_flops_attn(model, _x, y):
+    b, c, *spatial = y[0].shape
+    num_spatial = int(np.prod(spatial))
+    matmul_ops = 2 * b * (num_spatial ** 2) * c
+    model.total_ops += th.DoubleTensor([matmul_ops])
 
 
 class QKVAttention(nn.Module):
@@ -102,9 +119,9 @@ class AttentionBlock(nn.Module):
 
 def Normalize(in_channels, default_eps):
     if default_eps:
-        return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, affine=True)
+        return th.nn.GroupNorm(num_groups=32, num_channels=in_channels, affine=True)
     else:
-        return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+        return th.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
 
 class CrossAttention(nn.Module):
     def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0.):
@@ -145,17 +162,17 @@ class CrossAttention(nn.Module):
             # There must be 4 elements in the batch: {conditional, unconditional} x {prompt 1, prompt 2}
             assert x.size(0) == 4
             sims = sim.chunk(4)
-            sim = torch.cat((sims[0], sims[0], sims[2], sims[2]))
+            sim = th.cat((sims[0], sims[0], sims[2], sims[2]))
 
         if exists(mask):
             mask = rearrange(mask, 'b ... -> b (...)')
-            max_neg_value = -torch.finfo(sim.dtype).max
+            max_neg_value = -th.finfo(sim.dtype).max
             mask = repeat(mask, 'b j -> (b h) () j', h=h)
             sim.masked_fill_(~mask, max_neg_value)
 
         # attention, what we cannot get enough of
         # attn = sim.softmax(dim=-1)
-        attn = torch.softmax(sim.float(), dim=-1).type(sim.dtype)
+        attn = th.softmax(sim.float(), dim=-1).type(sim.dtype)
 
         out = einsum('b i j, b j d -> b i d', attn, v)
         out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
@@ -320,21 +337,18 @@ class CrossAttention(nn.Module):
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
         if self.prompt_to_prompt and is_self_attn:
-            # Unlike the original Prompt-to-Prompt which uses cross-attention layers, we copy attention maps for self-attention layers.
-            # There must be 4 elements in the batch: {conditional, unconditional} x {prompt 1, prompt 2}
             assert x.size(0) == 4
             sims = sim.chunk(4)
-            sim = torch.cat((sims[0], sims[0], sims[2], sims[2]))
+            sim = th.cat((sims[0], sims[0], sims[2], sims[2]))
 
         if exists(mask):
             mask = rearrange(mask, 'b ... -> b (...)')
-            max_neg_value = -torch.finfo(sim.dtype).max
+            max_neg_value = -th.finfo(sim.dtype).max
             mask = repeat(mask, 'b j -> (b h) () j', h=h)
             sim.masked_fill_(~mask, max_neg_value)
 
-        # attention, what we cannot get enough of
-        # attn = sim.softmax(dim=-1)
-        attn = torch.softmax(sim.float(), dim=-1).type(sim.dtype)
+      
+        attn = th.softmax(sim.float(), dim=-1).type(sim.dtype)
 
         out = einsum('b i j, b j d -> b i d', attn, v)
         out = rearrange(out, '(b h) n d -> b n (h d)', h=h)

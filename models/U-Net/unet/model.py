@@ -4,9 +4,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .attention import  QKVAttentionLegacy, QKVAttention, AttentionBlock, SpatialTransformer, CrossAttention, FeedForward
 from .utils import convert_module_to_f16, convert_module_to_f32
-from ldm.modules.diffusionmodules.util import (checkpoint, conv_nd, linear, avg_pool_nd, zero_module, normalization, timestep_embedding)
-# from ldm.modules.attention import SpatialTransformer, CrossAttention, FeedForward
+from .utils import checkpoint, conv_nd, linear, avg_pool_nd, zero_module, normalization, timestep_embedding
+from omegaconf import OmegaConf
+from .utils import convert_module_to_f16, convert_module_to_f32, convert_some_linear_to_f16, convert_some_linear_to_f32
 
+
+
+
+
+
+
+class PositionEmbedding(nn.Module):
+    def __init__(self, embed_dim, spacial_dim):
+        super().__init__()
+        self.positional_embedding = nn.Parameter(th.randn(embed_dim, spacial_dim ** 2 + 1) / embed_dim ** 0.5)
+    def forward(self):
+        return self.positional_embedding
+    
 class AttentionPool2d(nn.Module):
     """
     Adapted from CLIP: https://github.com/openai/CLIP/blob/main/clip/model.py
@@ -36,7 +50,6 @@ class AttentionPool2d(nn.Module):
         x = self.c_proj(x)
         return x[:, :, 0]
 
-
 class TimestepBlock(nn.Module):
 
     @abstractmethod
@@ -44,7 +57,6 @@ class TimestepBlock(nn.Module):
         """
         Apply the module to `x` given `emb` timestep embeddings.
         """
-
 
 class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     
@@ -444,7 +456,6 @@ class UNetModel(nn.Module):
                         num_heads = ch // num_head_channels
                         dim_head = num_head_channels
                     if legacy:
-                        #num_heads = 1
                         dim_head = ch // num_heads if use_spatial_transformer else num_head_channels
                     layers.append(
                         AttentionBlock(
@@ -489,3 +500,57 @@ class UNetModel(nn.Module):
             conv_nd(dims, model_channels, n_embed, 1),
            
         )
+            
+    def convert_to_fp16(self):
+        """
+        Convert the torso of the model to float16.
+        """
+        self.input_blocks.apply(convert_module_to_f16)
+        self.middle_block.apply(convert_module_to_f16)
+        self.output_blocks.apply(convert_module_to_f16)
+
+        for m in self.modules():
+            if isinstance(m, (CrossAttention, FeedForward)):
+                m.apply(convert_some_linear_to_f16)   
+
+    def convert_to_fp32(self):
+        """
+        Convert the torso of the model to float32.
+        """
+        self.input_blocks.apply(convert_module_to_f32)
+        self.middle_block.apply(convert_module_to_f32)
+        self.output_blocks.apply(convert_module_to_f32)
+
+        for m in self.modules():
+            if isinstance(m, (CrossAttention, FeedForward)):
+                m.apply(convert_some_linear_to_f32)   
+
+    def forward(self, x, timesteps=None, context=None, y=None,**kwargs):
+        assert (y is not None) == (
+            self.num_classes is not None
+        ), "must specify y if and only if the model is class-conditional"
+        hs = []
+        t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
+        emb = self.time_embed(t_emb.type(self.time_embed[0].weight.dtype))
+
+        if self.num_classes is not None:
+            assert y.shape == (x.shape[0],)
+            emb = emb + self.label_emb(y)
+        # print("started",flush=True)
+        h = x.type(self.dtype)
+        for module in self.input_blocks:
+            h = module(h, emb, context)
+            # print("loaded",flush=True)
+            hs.append(h)
+        # print("started",flush=True)
+        h = self.middle_block(h, emb, context)
+        # print("middle done",flush=True)
+        for module in self.output_blocks:
+            h = th.cat([h, hs.pop()], dim=1)
+            h = module(h, emb, context)
+        h = h.type(x.dtype)
+        # print("completed",flush=True)
+        if self.predict_codebook_ids:
+            return self.id_predictor(h)
+        else:
+            return self.out(h)
