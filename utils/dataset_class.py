@@ -1,24 +1,57 @@
-import torch
-from torch.utils.data import Dataset
+import random
+from torch.utils.data import IterableDataset
+import torchvision.transforms as T
 
-class PromptDataset(Dataset):
-    def __init__(self, dataset, embedder):
-        self.prompts = dataset["prompt"]
-        self.instructions = dataset["Instruction"]
+class StreamingPromptDataset(IterableDataset):
+    def __init__(self, dataset, embedder, shuffle=False, buffer_size=100):
+        self.dataset = dataset
         self.embedder = embedder
+        self.shuffle = shuffle
+        self.buffer_size = buffer_size
+        self.image_transform = T.Compose([
+            T.Lambda(lambda img: img.convert("RGB") if img.mode in ["L", "RGBA", "CMYK", "BGRA"] else img),
+            T.Resize((128, 128)),
+            T.ToTensor()
+        ])
 
-    def __len__(self):
-        return len(self.prompts)
+    def __iter__(self):
+        # Buffer for shuffling if needed
+        samples = []
+        dataset_iter = iter(self.dataset)
+        
+        # Process samples one by one - no batching in the dataset
+        for example in dataset_iter:
+            prompt_text = example["auxiliary_prompt"]
+            instruction_text = example["instruction"]
+            input_image = example["input_img"]
+            output_image = example["processed_img"]
 
-    def __getitem__(self, idx):
-        prompt_text = self.prompts[idx]
-        instruction_text = self.instructions[idx]
+            # Apply transformations to images
+            input_image = self.image_transform(input_image)
+            output_image = self.image_transform(output_image)
 
-        # Generate embeddings separately
-        prompt_embedding = self.embedder.get_text_embedding(prompt_text)
-        instruction_embedding = self.embedder.get_text_embedding(instruction_text)
+            # Generate text embeddings
+            instruction_embedding, prompt_embedding = self.embedder.get_dual_embeddings(instruction_text, prompt_text)
 
-        return {
-            "prompt_embedding": torch.tensor(prompt_embedding, dtype=torch.float32).squeeze(0),
-            "instruction_embedding": torch.tensor(instruction_embedding, dtype=torch.float32).squeeze(0)
-        }
+            sample = {
+                "input_img": input_image,
+                "output_img": output_image,
+                "prompt_embedding": prompt_embedding,
+                "instruction_embedding": instruction_embedding
+            }
+            
+            if not self.shuffle:
+                yield sample
+            else:
+                samples.append(sample)
+                if len(samples) >= self.buffer_size:
+                    random.shuffle(samples)
+                    for s in samples:
+                        yield s
+                    samples = []
+        
+        # Yield any remaining samples
+        if samples and self.shuffle:
+            random.shuffle(samples)
+            for s in samples:
+                yield s

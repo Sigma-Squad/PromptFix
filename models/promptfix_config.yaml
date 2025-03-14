@@ -1,0 +1,44 @@
+autoencoder:
+  ddconfig:
+    double_z: true
+    z_channels: 4
+    resolution: 256
+    in_channels: 3
+    out_ch: 3
+    ch: 128
+    ch_mult: [1, 2, 4, 8]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+  lossconfig:
+    target: "torch.nn.Identity"
+  embed_dim: 4
+
+unet:
+  image_size: 32
+  in_channels: 8
+  model_channels: 320
+  out_channels: 4
+  num_res_blocks: 2
+  attention_resolutions: [4, 2, 1]
+  dropout: 0
+  channel_mult: [1, 2, 4, 4]
+  conv_resample: true
+  dims: 2
+  num_classes: null
+  use_checkpoint: true
+  use_fp16: false
+  default_eps: false
+  force_type_convert: true
+  num_heads: 8
+  num_head_channels: -1
+  num_heads_upsample: -1
+  use_scale_shift_norm: false
+  resblock_updown: false
+  use_new_attention_order: false
+  use_spatial_transformer: true
+  transformer_depth: 1
+  context_dim: 768
+  n_embed: null
+  legacy: false
+  disable_dual_context: false

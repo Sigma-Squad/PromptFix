@@ -8,12 +8,6 @@ from .utils import checkpoint, conv_nd, linear, avg_pool_nd, zero_module, normal
 from omegaconf import OmegaConf
 from .utils import convert_module_to_f16, convert_module_to_f32, convert_some_linear_to_f16, convert_some_linear_to_f32
 
-
-
-
-
-
-
 class PositionEmbedding(nn.Module):
     def __init__(self, embed_dim, spacial_dim):
         super().__init__()
@@ -525,7 +519,7 @@ class UNetModel(nn.Module):
             if isinstance(m, (CrossAttention, FeedForward)):
                 m.apply(convert_some_linear_to_f32)   
 
-    def forward(self, x, timesteps=None, context=None, y=None,**kwargs):
+    def forward(self, x, timesteps=None, context=None, y=None, **kwargs):
         assert (y is not None) == (
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"

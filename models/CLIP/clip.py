@@ -23,21 +23,13 @@ class CLIPTextEmbedder:
         
         return text_embedding.cpu().numpy()
     
-    def get_dual_embeddings(self, instruction, text):
+    def get_dual_embeddings(self, instruction, prompt):
         """
         Generates embeddings for both an instruction and a text prompt.
         :param instruction: Instruction prompt string
-        :param text: Text prompt string
-        :return: Tuple of numpy arrays (embedding1, embedding2)
+        :param prompt: Text prompt string
+        :return: Tuple of numpy arrays (instruction_embedding, prompt_embedding)
         """
-        embedding1 = self.get_text_embedding(instruction)
-        embedding2 = self.get_text_embedding(text)
-        return embedding1, embedding2
-
-if __name__ == "__main__":
-    embedder = CLIPTextEmbedder()
-    instruction = "Describe the image in detail."
-    text = "A cat sitting on a windowsill looking at the sunset."
-    embedding1, embedding2 = embedder.get_dual_embeddings(instruction, text)
-    print(f"Instruction embedding shape: {embedding1.shape}")
-    print(f"Text embedding shape: {embedding2.shape}")
+        instruction_embedding = self.get_text_embedding(instruction)
+        prompt_embedding = self.get_text_embedding(prompt)
+        return instruction_embedding, prompt_embedding
