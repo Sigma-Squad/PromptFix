@@ -14,3 +14,4 @@ _pycache_/
 # Ignore logs and environment variables
 *.log
 .env
+*.pt

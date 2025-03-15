@@ -227,46 +227,46 @@ class Encoder(nn.Module):
             block_in, 2*z_channels if double_z else z_channels, 3, 1, 1)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
-        logger.info(f"Input x shape: {x.shape}")
+        # logger.info(f"Input x shape: {x.shape}")
 
         temb = None
         hs: List[torch.Tensor] = [self.conv_in(x)]
-        logger.info(f"After conv_in: {hs[-1].shape}")
+        # logger.info(f"After conv_in: {hs[-1].shape}")
 
         h: torch.Tensor = hs[-1]
         for level in range(self.num_resolutions):
-            logger.info(f"--- Level {level} ---")
+            # logger.info(f"--- Level {level} ---")
             for itr_block in range(self.num_res_blocks):
                 h = self.down[level].block[itr_block](h, temb)  # type: ignore
-                logger.info(f"  ResBlock {itr_block}: {h.shape}")
+                # logger.info(f"  ResBlock {itr_block}: {h.shape}")
 
                 if len(self.down[level].attn) > 0:  # type: ignore
                     h = self.down[level].attn[itr_block](h)  # type: ignore
-                    logger.info(f"  Attn Block {itr_block}: {h.shape}")
+                    # logger.info(f"  Attn Block {itr_block}: {h.shape}")
 
                 hs.append(h)
 
             if level != self.num_resolutions - 1:
                 hs.append(self.down[level].downsample(hs[-1]))  # type: ignore
-                logger.info(f"  After Downsample: {hs[-1].shape}")
+                # logger.info(f"  After Downsample: {hs[-1].shape}")
 
-        logger.info("--- Mid Block ---")
+        # logger.info("--- Mid Block ---")
         h = self.mid.block_1(h, temb)
-        logger.info(f"After Mid Block 1: {h.shape}")
+        # logger.info(f"After Mid Block 1: {h.shape}")
 
         h = self.mid.attn_1(h)
-        logger.info(f"After Mid Attention: {h.shape}")
+        # logger.info(f"After Mid Attention: {h.shape}")
 
         h = self.mid.block_2(h, temb)
-        logger.info(f"After Mid Block 2: {h.shape}")
+        # logger.info(f"After Mid Block 2: {h.shape}")
 
         h = self.norm_out(h)
-        logger.info(f"Before Activation: {h.shape}")
+        # logger.info(f"Before Activation: {h.shape}")
 
         h = h * torch.sigmoid(h)
-        logger.info(f"Before conv_out: {h.shape}")
+        # logger.info(f"Before conv_out: {h.shape}")
 
         h = self.conv_out(h)
-        logger.info(f"Final Output: {h.shape}")
+        # logger.info(f"Final Output: {h.shape}")
 
         return h, hs
