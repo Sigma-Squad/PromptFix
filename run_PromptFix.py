@@ -2,7 +2,8 @@ import torch
 from torch.utils.data import DataLoader
 from datasets import load_dataset
 from models.CLIP.clip import CLIPTextEmbedder
-from utils.dataset_class import StreamingPromptDataset
+from utils.dataset_class import StreamingPromptFixDataset
+from utils.dataset_class import PromptFixDataset
 from models.VAE.autoencoder import AutoencoderKL
 from models.UNet.unet.model import UNetModel
 from models.PromptFix import PromptFix
@@ -24,7 +25,7 @@ if __name__ == "__main__":
     embedder = CLIPTextEmbedder()
 
     # Create dataset and dataloader
-    prompt_dataset = StreamingPromptDataset(dataset=dataset, shuffle=True, embedder=embedder, buffer_size=BUFFER_SIZE)
+    prompt_dataset = PromptFixDataset(dataset=dataset, shuffle=True, embedder=embedder, buffer_size=BUFFER_SIZE)
     dataloader = DataLoader(prompt_dataset, batch_size=BATCH_SIZE)
     
     # instantiate model

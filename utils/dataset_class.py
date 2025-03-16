@@ -1,8 +1,10 @@
 import random
+import torch
 from torch.utils.data import IterableDataset
 import torchvision.transforms as T
+from torch.utils.data import Dataset
 
-class StreamingPromptDataset(IterableDataset):
+class StreamingPromptFixDataset(IterableDataset):
     def __init__(self, dataset, embedder, shuffle=False, buffer_size=100):
         self.dataset = dataset
         self.embedder = embedder
@@ -55,3 +57,41 @@ class StreamingPromptDataset(IterableDataset):
             random.shuffle(samples)
             for s in samples:
                 yield s
+
+
+
+class PromptFixDataset(Dataset):
+       
+    def __init__(self, dataset, embedder):
+        self.dataset = list(dataset)  
+        self.embedder = embedder
+        self.image_transform = T.Compose([
+            T.Lambda(lambda img: img.convert("RGB") if img.mode in ["L", "RGBA", "CMYK", "BGRA"] else img),
+            T.Resize((128, 128)),
+            T.ToTensor()
+        ])
+
+    def __len__(self):
+        return len(self.dataset) 
+
+    def __getitem__(self, idx):
+        example = self.dataset[idx]  
+        
+        prompt_text = example["auxiliary_prompt"]
+        instruction_text = example["instruction"]
+        input_image = example["input_img"]
+        output_image = example["processed_img"]
+
+        # Apply image transformations
+        input_image = self.image_transform(input_image)
+        output_image = self.image_transform(output_image)
+
+        # Generate text embeddings
+        instruction_embedding, prompt_embedding = self.embedder.get_dual_embeddings(instruction_text, prompt_text)
+
+        return {
+            "input_img": input_image,
+            "output_img": output_image,
+            "prompt_embedding": prompt_embedding,
+            "instruction_embedding": instruction_embedding
+        }
