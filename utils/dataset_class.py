@@ -59,8 +59,10 @@ class StreamingPromptFixDataset(IterableDataset):
                 yield s
 
 class PromptFixDataset(Dataset):
-    def __init__(self, dataset, embedder):
-        self.dataset = list(dataset)  
+    def __init__(self, dataset, embedder, shuffle=False):
+        self.dataset = list(dataset)
+        if shuffle:
+            random.shuffle(self.dataset)
         self.embedder = embedder
         self.image_transform = T.Compose([
             T.Lambda(lambda img: img.convert("RGB") if img.mode in ["L", "RGBA", "CMYK", "BGRA"] else img),

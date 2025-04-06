@@ -1,13 +1,12 @@
 import torch
 from torch.utils.data import DataLoader
-from datasets import load_dataset
+from datasets import load_from_disk, load_dataset
+from utils.dataset_class import StreamingPromptFixDataset, PromptFixDataset
 from models.CLIP.clip import CLIPTextEmbedder
-from utils.dataset_class import StreamingPromptFixDataset
-from utils.dataset_class import PromptFixDataset
 from models.VAE.autoencoder import AutoencoderKL
 from models.UNet.unet.model import UNetModel
 from models.PromptFix import PromptFix
-import yaml, os, argparse
+import yaml, os, argparse, time
 
 # hyperparameters
 BUFFER_SIZE = 100
@@ -18,15 +17,19 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train PromptFix')
     parser.add_argument('--checkpoint', type=int, required=False, help='checkpoint model weights to load')
+    parser.add_argument ('-f', type=str, help='The local dataset to load')
     args = parser.parse_args()
     
     # Load dataset
-    dataset = load_dataset("yeates/PromptfixData", split="train", streaming=True)
+    dataset = load_from_disk(args.f)
+    # dataset = load_dataset("yeates/PromptfixData", split="train", streaming=True)
     embedder = CLIPTextEmbedder()
 
     # Create dataset and dataloader
-    prompt_dataset = PromptFixDataset(dataset=dataset, shuffle=True, embedder=embedder, buffer_size=BUFFER_SIZE)
+    # prompt_dataset = StreamingPromptFixDataset(dataset=dataset,shuffle=True, embedder=embedder, buffer_size=BUFFER_SIZE)
+    prompt_dataset = PromptFixDataset(dataset=dataset, shuffle=True, embedder=embedder)
     dataloader = DataLoader(prompt_dataset, batch_size=BATCH_SIZE)
+    print("Created dataset and dataloader")
     
     # instantiate model
     model_config = yaml.safe_load(open("./models/promptfix_config.yaml", "r"))
@@ -53,10 +56,17 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(promptfix.parameters())
 
     # start training
+    print("Starting training...")
+    start = time.time()
     for epoch in range(NUM_EPOCHS):
         print(F"Epoch {epoch}")
         for idx, batch in enumerate(dataloader):
-            input_imgs, output_imgs, instruction_embeddings, prompt_embeddings = batch.values()
+            # Move all batch tensors to the device
+            input_imgs = batch["input_img"].to(DEVICE)
+            output_imgs = batch["output_img"].to(DEVICE)
+            instruction_embeddings = batch["instruction_embedding"].to(DEVICE)
+            prompt_embeddings = batch["prompt_embedding"].to(DEVICE)
+            
             reconstructed_imgs = promptfix(input_imgs, instruction_embeddings, prompt_embeddings)
             loss = loss_fn(reconstructed_imgs, output_imgs)
             
@@ -67,8 +77,10 @@ if __name__ == "__main__":
             print(f"Loss: {loss.item()}")
         
         # checkpoints
+        torch.save(promptfix.state_dict(), f"promptfix_weights_{epoch}.pt")
         if os.path.exists(f"promptfix_weights_{epoch-1}.pt"):
             os.remove(f"promptfix_weights_{epoch-1}.pt")
-        torch.save(promptfix.state_dict(), f"promptfix_weights_{epoch}.pt")
+        
+        print(f"Finished epoch {epoch} in {time.time() - start} seconds")
         
     print("Training done!")
