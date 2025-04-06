@@ -58,10 +58,7 @@ class StreamingPromptFixDataset(IterableDataset):
             for s in samples:
                 yield s
 
-
-
 class PromptFixDataset(Dataset):
-       
     def __init__(self, dataset, embedder):
         self.dataset = list(dataset)  
         self.embedder = embedder
